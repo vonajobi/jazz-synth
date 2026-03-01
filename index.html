@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>jazz-synth</title>
+  </head>
+  <body>
+    <div id="app">
+    <canvas id="glcanvas"></canvas>
+    <div id="controls">
+        <select id="track">
+          <option value="/paolo.mp3">Paolo Orgento</option>
+          <option value="">SongHere</option>
+          <option value="/audiohere">SongHere</option>
+        </select>
+        <button id="solo">Toggle Solo Mid</button>
+        <div id="info">Tap/Drag to interact. Short tap spawns a note Long press to togle solo</div>
+    </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
