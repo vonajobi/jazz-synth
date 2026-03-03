@@ -1,108 +1,140 @@
-#version 300 es
 precision highp float;
-in vec2 v_uv;
-out vec4 outColor;
+uniform float time;
+uniform float mouseInfluence;
+uniform float electricIntensity;
+uniform float glowStrength;
+uniform float arcFrequency;
 
-uniform vec2 u_resolution;
-uniform float u_time;
-uniform vec3 u_bands;
-uniform float u_centroid;
-uniform float u_onset;
-uniform vec3 u_mouse;
+uniform vec3 uColor1;
+uniform vec3 uColor2;
+uniform vec3 uColor3;
+uniform vec3 uColor4;
+uniform vec3 uColor5;
+uniform vec3 uColor6;
+uniform vec3 uColor7;
+uniform vec3 uColor8;
 
-// event arrays
-uniform vec3 u_eventPos[6]; // x,y,age
-uniform vec2 u_eventMeta[6]; // energy, hue
-uniform int u_eventCount;
+varying vec3 vPosition;
+varying vec3 vNormal;
+varying float vIntensity;
+varying float vDistFromMouse;
+varying vec2 vUv;
 
-float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453123); }
-float noise(vec2 p){
-  vec2 i = floor(p);
-  vec2 f = fract(p);
-  float a = hash(i);
-  float b = hash(i + vec2(1.0,0.0));
-  float c = hash(i + vec2(0.0,1.0));
-  float d = hash(i + vec2(1.0,1.0));
-  vec2 u = f*f*(3.0-2.0*f);
-  return mix(a,b,u.x) + (c-a)*u.y*(1.0-u.x) + (d-b)*u.x*u.y;
+/* Insert noise helpers (same as vert) */
+float hash(float n) { return fract(sin(n) * 43758.5453); }
+float hash3D(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
 }
 
-vec3 hsv2rgb(vec3 c){
-  vec3 p = abs(fract(c.x + vec3(0.0, 2.0/3.0, 1.0/3.0)) * 6.0 - 3.0);
-  return c.z * mix(vec3(1.0), clamp(p - 1.0, 0.0, 1.0), c.y);
+float noise(vec3 x) {
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n = p.x + p.y * 57.0 + p.z * 113.0;
+    return mix(mix(mix(hash(n + 0.0), hash(n + 1.0), f.x),
+                mix(hash(n + 57.0), hash(n + 58.0), f.x), f.y),
+                mix(mix(hash(n + 113.0), hash(n + 114.0), f.x),
+                mix(hash(n + 170.0), hash(n + 171.0), f.x), f.y), f.z);
 }
 
-void main(){
-  vec2 uv = v_uv;
-  vec2 p = (uv * 2.0 - 1.0);
-  p.x *= u_resolution.x / u_resolution.y;
+float fbm(vec3 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    float frequency = 1.0;
+    for (int i = 0; i < 5; i++) {
+        value += amplitude * noise(p * frequency);
+        frequency *= 2.0;
+        amplitude *= 0.5;
+    }
+    return value;
+}
 
-  float hue = mix(210.0/360.0, 40.0/360.0, clamp(u_centroid, 0.0, 1.0));
-  float saturation = 0.6;
-  float lightness = 0.12 + 0.25 * u_bands.x;
+void main() {
+float t1 = sin(time * 0.8 + vUv.x * 5.0) * 0.5 + 0.5;
+float t2 = cos(time * 0.6 - vUv.y * 6.0) * 0.5 + 0.5;
+float t3 = sin(time * 1.5 + length(vPosition) * 2.0) * 0.5 + 0.5;
+float noisePattern = fbm(vPosition * 3.5 + vec3(time * 0.8, -time * 0.5, time * 1.1));
+float energyFlow = fbm(vPosition * 2.5 - vec3(time * 2.2, -time * 1.2, time * 1.8));
 
-  float n = noise(uv * 4.0 + u_time * 0.03) * 0.6;
-  vec3 color = hsv2rgb(vec3(hue, saturation, clamp(lightness + n * 0.06, 0.0, 1.0)));
+float slowPulse = sin(time * 2.5 + vPosition.x * 2.0) * 0.5 + 0.5;
+float fastPulse = sin(time * 18.0 + vPosition.y * 5.0) * 0.5 + 0.5;
 
-  float bass = u_bands.x;
-  vec2 center = vec2(0.0, -0.2);
-  float d = length(p - center);
-  float pulse = smoothstep(0.6, 0.0, d - 0.6 * bass * 0.8);
-  color += vec3(1.0, 0.7, 0.45) * pulse * (0.5 + bass);
+float arcSpeed1 = 10.0 + arcFrequency * 5.0;
+float arcTravel1 = sin(vPosition.x * 15.0 + vPosition.y * 10.0 + time * arcSpeed1);
+float arcTravel2 = cos(vPosition.y * 9.0 - vPosition.z * 12.0 - time * arcSpeed1 * 0.8);
+float arcTravel3 = sin(vPosition.z * 11.0 + vPosition.x * 13.0 + time * arcSpeed1 * 1.2);
 
-  float mid = u_bands.y;
-  float t = u_time * 0.6;
-  float freq = 1.8 + mid * 3.0;
-  float amp = 0.15 + mid * 0.4;
-  float y = sin((uv.x + t * 0.12) * freq * 2.0) * amp + 0.0;
-  float distToRibbon = abs(uv.y - (0.5 + y));
-  float ribbon = smoothstep(0.12, 0.0, distToRibbon) * (0.5 + mid * 1.5);
-  color += vec3(0.9, 0.6, 0.85) * ribbon;
+float arc1 = smoothstep(0.75, 0.9, arcTravel1) * smoothstep(0.9, 0.75, arcTravel1);
+float arc2 = smoothstep(0.7, 0.85, arcTravel2) * smoothstep(0.85, 0.7, arcTravel2);
+float arc3 = smoothstep(0.8, 0.95, arcTravel3) * smoothstep(0.95, 0.8, arcTravel3);
+float arc = max(max(arc1, arc2), arc3);
+arc = pow(arc, 1.5);
+arc *= electricIntensity * (1.0 + arcFrequency);
 
-  // pointer ripple (keep small)
-  vec2 ripplePos = u_mouse.xy;
-  float pressed = u_mouse.z;
-  float ripple = 0.0;
-  if (pressed > 0.5) {
-    vec2 rp = (ripplePos * 2.0 - 1.0);
-    rp.x *= u_resolution.x / u_resolution.y;
-    float rd = length(p - rp);
-    ripple += smoothstep(0.4, 0.0, rd - sin(u_time * 8.0) * 0.01) * 0.6;
-  }
+float nodeEffect = 0.0;
+vec3 normPos = normalize(vPosition);
+float closenessToAxes = pow(abs(normPos.x * normPos.y * normPos.z), 0.1);
+if (closenessToAxes < 0.8 && hash3D(floor(vPosition * 8.0)) > 0.7) {
+    float nodePulse = sin(time * 6.0 + hash(length(vPosition)) * 15.0) * 0.5 + 0.5;
+    nodeEffect = nodePulse * arcFrequency * 0.8 * smoothstep(0.8, 0.7, closenessToAxes);
+}
+float spark = 0.0;
+float sparkThreshold = 0.98 - arcFrequency * 0.1;
+if (hash(floor(time * (25.0 + arcFrequency * 20.0)) + vPosition.x * 18.0 + vPosition.y * 9.0) > sparkThreshold) {
+    spark = (0.8 + hash(vPosition.z + time) * 0.2) * electricIntensity;
+    spark = pow(spark, 2.0);
+}
+vec3 baseColor = mix(uColor1, uColor2, noisePattern * 0.6 + 0.4);
+baseColor = mix(baseColor, uColor3, t1 * 0.6);
+baseColor = mix(baseColor, uColor4, energyFlow * 0.4 * electricIntensity * slowPulse);
+baseColor = mix(baseColor, uColor8, sin(vPosition.z * 5.0 - time * 1.5) * 0.1 * t2);
 
-  // event-driven local effects
-  for (int i = 0; i < 6; i++) {
-    if (i >= u_eventCount) break;
-    vec3 ev = u_eventPos[i];
-    vec2 meta = u_eventMeta[i];
-    vec2 evp = (ev.xy * 2.0 - 1.0);
-    evp.x *= u_resolution.x / u_resolution.y;
-    float age = ev.z; // 0..1
-    float energy = meta.x;
-    float ehue = meta.y;
-    float ed = length(p - evp);
-    // displacement pulse
-    float edg = smoothstep(0.02, 0.0, abs(ed - (1.0 - age) * 0.6)) * energy * (1.0 - age);
-    ripple += edg * 1.2;
-    // colored bloom near event
-    float glow = smoothstep(0.35, 0.0, ed) * energy * (1.0 - age) * 1.6;
-    vec3 accent = hsv2rgb(vec3(ehue, 0.7, 0.9));
-    color += accent * glow;
-    // small local ribbon seed
-    float seed = smoothstep(0.2, 0.0, ed) * energy * (1.0 - age);
-    color += vec3(1.0, 0.8, 0.6) * seed * 0.6;
-  }
+float arcWidth = 0.6 + sin(time * 4.0 + vPosition.x * 6.0) * 0.4;
+vec3 arcColor = mix(uColor4, uColor5, arcWidth * t2);
+arcColor = mix(arcColor, uColor6, arc * t3 * 0.8);
+vec3 finalColor = mix(baseColor, arcColor, arc * arcWidth);
 
-  color += vec3(0.6,0.9,1.0) * ripple * 0.6;
+vec3 nodeColor = mix(uColor6, uColor7, fastPulse);
+finalColor = mix(finalColor, nodeColor, nodeEffect);
+finalColor = mix(finalColor, uColor7, nodeEffect * fastPulse * 0.6);
 
-  float high = u_bands.z;
-  float sp = pow(noise(uv * 80.0 + u_time * 6.0), 6.0) * high * 1.6;
-  color += vec3(1.0, 0.8, 0.6) * sp;
+vec3 sparkColor = mix(uColor6, uColor7, hash(vPosition.y + time) * 0.8 + 0.2);
+finalColor = mix(finalColor, sparkColor, spark);
 
-  float vig = smoothstep(1.0, 0.3, length(p) );
-  color *= mix(1.0, 0.6, vig);
-  float grain = (hash(gl_FragCoord.xy) - 0.5) * 0.03;
-  color += grain;
+float highlight = smoothstep(0.6, 1.5, vIntensity);
+finalColor = mix(finalColor, uColor4, highlight * 0.4 * (1.0 - arc));
+finalColor = mix(finalColor, uColor5, highlight * 0.2 * arc);
 
-  outColor = vec4(color, 1.0);
+float mouseEffect = smoothstep(0.8, 0.1, vDistFromMouse) * mouseInfluence;
+if (mouseEffect > 0.1) {
+    float dischargeNoise = hash(vPosition.x * 10.0 + vPosition.y * 10.0 + floor(time * (30.0 + mouseInfluence * 20.0)));
+    float dischargeThreshold = 0.6 - mouseInfluence * 0.3;
+    if (dischargeNoise > dischargeThreshold) {
+        float dischargeStrength = pow((dischargeNoise - dischargeThreshold) / (1.0 - dischargeThreshold), 2.0);
+        vec3 dischargeColor = mix(uColor5, uColor7, dischargeStrength);
+        finalColor = mix(finalColor, dischargeColor, dischargeStrength * mouseEffect * 1.5);
+    }
+    finalColor = mix(finalColor, uColor8, mouseEffect * 0.3 * t3);
+}
+
+float edgeFactor = pow(1.0 - abs(dot(normalize(vNormal), vec3(0.0, 0.0, 1.0))), 2.5);
+vec3 edgeColor = mix(uColor3, uColor5, t2 * slowPulse);
+edgeColor = mix(edgeColor, uColor6, edgeFactor * 0.4);
+finalColor += edgeColor * edgeFactor * electricIntensity * 0.8;
+
+float flicker = 0.9 + 0.1 * hash(vPosition.x * 20.0 + floor(time * (35.0 + arcFrequency * 15.0)));
+flicker *= 0.96 + 0.04 * sin(time * 80.0 + vPosition.y * 40.0);
+finalColor *= flicker;
+
+float glow = pow(vIntensity * (mouseEffect * 0.6 + 0.4), 2.0) * glowStrength;
+glow = clamp(glow * 1.0, 0.0, 1.0);
+finalColor += mix(uColor4, uColor5, t3) * glow * 0.4;
+finalColor += uColor6 * glow * 0.25 * fastPulse;
+
+finalColor *= (0.7 + electricIntensity * 0.5);
+
+gl_FragColor = vec4(finalColor, 1.0);
 }

@@ -23,13 +23,9 @@ body{
   position:fixed;
   left:14px;top:14px;
   display:flex;gap:8px;
-  align-items:center;
-  z-index:5
-}
-#info{
-  margin-left:8px;
-  font-size:13px;
-  opacity:0.9
+  align-items:self-start;
+  z-index:5;
+  width: 100%;
 }
 button,select{
   background:rgba(166, 125, 155, 0.06);
@@ -43,9 +39,12 @@ button,select{
   height: 30px;
   font-size: small;
 }
+select{
+  background-blend-mode: difference;
+}
 button:hover, button:focus{
   background-color: rgb(195, 74, 163);
-  transform: translateY(4px);
+  transform:scale(1.05);
 
 }
 button:after, select:after{
