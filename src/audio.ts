@@ -10,7 +10,6 @@ export class AudioEngine {
   private dataArray: Uint8Array | null = null;
   private buffer: AudioBuffer | null = null;
   private playing = false;
-  // private smoothing = 0.85;
   private bassSmooth = new SmoothValue(0.1, 0);
   private midSmooth = new SmoothValue(0.12, 0);
   private highSmooth = new SmoothValue(0.15, 0);
@@ -35,9 +34,9 @@ export class AudioEngine {
     if (!this.ctx || !this.buffer) return;
     if (this.playing) return;
 
-    // some browsers start the AudioContext in suspended state; resume on user
-    // interaction so playback actually begins and analyser data becomes valid.
-    await this.ctx.resume();
+    if (this.ctx.state === 'suspended') {
+      await this.ctx.resume();
+    }
 
     this.source = this.ctx.createBufferSource();
     this.source.buffer = this.buffer;
@@ -70,8 +69,16 @@ export class AudioEngine {
   isPlaying() { return this.playing; }
 
   getBands(): Bands {
+  if (!this.playing) {
+    // When not playing, return the current smoothed values to prevent graphics from resetting
+    return {
+      bass: clamp(this.bassSmooth.get(), 0, 1),
+      mid: clamp(this.midSmooth.get(), 0, 1),
+      high: clamp(this.highSmooth.get(), 0, 1)
+    };
+  }
   if (!this.analyser || !this.dataArray) return { bass: 0, mid: 0, high: 0 };
-  this.analyser.getByteFrequencyData(this.dataArray);
+  this.analyser.getByteFrequencyData(this.dataArray as Uint8Array<ArrayBuffer>);
   const data = this.dataArray;
   const n = data.length;
   // map bins to frequency bands roughly

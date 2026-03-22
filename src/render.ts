@@ -5,9 +5,6 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { SmoothValue, clamp } from './utility';
 import { AudioEngine } from './audio';
-import type { Bands } from './audio';
-
-// Vite raw imports for GLSL files
 import vertText from './shader.vert?raw';
 import fragText from './shader.frag?raw';
 
@@ -26,6 +23,7 @@ let electricMesh: THREE.LineSegments;
 
 let mouse = new THREE.Vector2(0, 0);
 let mouseInfluenceSmooth = new SmoothValue(0.12, 0);
+let audioInfluenceSmooth = new SmoothValue(0.12, 0);
 let timeStart = performance.now();
 let audioEngine: AudioEngine;
 
@@ -79,7 +77,7 @@ export async function initRenderer(audio: AudioEngine) {
     const iterations = 10000;
 
     let sigma = 10.0;
-    let rho = 28.0;
+    let rho = 24.0;
     let beta = 8.0 / 3.0;
 
     let x = 0.1;
@@ -179,7 +177,7 @@ export async function initRenderer(audio: AudioEngine) {
     const speeds = new Float32Array(particleCount);
     const particleTypes = new Float32Array(particleCount);
 
-    const radius = 2.5;
+    const radius = 3.5;
 
     for (let i = 0; i < particleCount; i++) {
       const dist = radius + (Math.random() - 0.5) * 0.8;
@@ -190,7 +188,7 @@ export async function initRenderer(audio: AudioEngine) {
       positions[i * 3 + 1] = dist * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = dist * Math.cos(phi);
 
-      sizes[i] = 0.02 + Math.random() * 0.06;
+      sizes[i] = 0.02 + Math.random() * 0.02;
       offsets[i] = Math.random() * 100;
       speeds[i] = 0.4 + Math.random() * 1.2;
       particleTypes[i] = Math.floor(Math.random() * 4);
@@ -214,7 +212,6 @@ export async function initRenderer(audio: AudioEngine) {
       },
       vertexShader: `
         precision highp float;
-        //attribute vec3 position;
         attribute float size;
         uniform float time;
         void main() {
@@ -279,7 +276,7 @@ export async function initRenderer(audio: AudioEngine) {
         float r = texture2D(tDiffuse, vUv + o).r;
         float g = texture2D(tDiffuse, vUv).g;
         float b = texture2D(tDiffuse, vUv - o).b;
-        gl_FragColor = vec4(r, g, b, 1.0);
+        gl_FragColor = vec4(r, g, b, 0.9);
       }
     `
   };
@@ -310,7 +307,6 @@ function onResize() {
   camera.updateProjectionMatrix();
 }
 
-let lastBands: Bands = { bass: 0, mid: 0, high: 0 };
 
 const bassSmooth = new SmoothValue(0.06, 0);
 const midSmooth = new SmoothValue(0.08, 0);
@@ -318,25 +314,27 @@ const highSmooth = new SmoothValue(0.12, 0);
 
 function animate() {
   requestAnimationFrame(animate);
-
+  
   const now = (performance.now() - timeStart) * 0.001;
-
   const bands = audioEngine.getBands();
-  lastBands = bands;
 
   const bass = bassSmooth.update(bands.bass);
   const mid = midSmooth.update(bands.mid);
   const high = highSmooth.update(bands.high);
 
-  const timeScale = 1.0 + mid * 1.8;
+  const level = (bands.bass + bands.mid + bands.high)/3.0;
+  const audioInfluence = clamp(audioInfluenceSmooth.update(level));
+
+  //audio influences
+  const timeScale = 1.0 + mid * 0.1;
   electricMaterial.uniforms.time.value = now * timeScale;
 
   electricMaterial.uniforms.arcFrequency.value =
-    clamp(0.05 + high * 0.6, 0.0, 1.0);
+    clamp(0.05 + high * 0.2, 0.0, 1.0);
 
-  const intensity = clamp(0.6 + bass * 1.2, 0.0, 2.0);
+  const intensity = clamp(0.6 + bass * 0.2, 0.0, 2.0);
   electricMaterial.uniforms.electricIntensity.value = intensity;
-  electricMaterial.uniforms.glowStrength.value = 0.6 + mid * 1.2;
+  electricMaterial.uniforms.glowStrength.value = 0.6 + mid * 0.5;
 
   (particlePoints.material as THREE.ShaderMaterial).uniforms.time.value =
     now * (1.0 + mid * 0.6);
@@ -350,10 +348,12 @@ function animate() {
   const mi = mouseInfluenceSmooth.update(0);
   const mouseInfluence = clamp(mi, 0, 1.5);
 
-  electricMaterial.uniforms.mouseInfluence.value = mouseInfluence;
+  const totalInfluence = Math.max(mouseInfluence, audioInfluence);
+  electricMaterial.uniforms.mouseInfluence.value = totalInfluence;
+  // electricMaterial.uniforms.mouseInfluence.value = mouseInfluence;
   electricMaterial.uniforms.mouse.value.set(mouse.x, mouse.y);
 
-  bloomPass.strength = 0.8 + mid * 1.6 + high * 0.4;
+  bloomPass.strength = 0.8 + mid * 0.5 + high * 0.4;
   bloomPass.radius = 0.35 + mid * 0.25;
   bloomPass.threshold = 0.75 - mid * 0.3;
 

@@ -5,7 +5,6 @@ export function lerp(a: number, b: number, t: number) { return a + (b - a) * t; 
 
 export class SmoothValue {
   private value = 0;
-  private velocity = 0;
   public smoothing = 0.08;
   constructor(smoothing = 0.08, initial = 0) { this.smoothing = smoothing; this.value = initial; }
   update(target: number) { this.value += (target - this.value) * this.smoothing; return this.value; }
